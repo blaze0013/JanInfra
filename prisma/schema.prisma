@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String?
+  email     String   @unique
+  password  String // Only for local demo
+  role      String   @default("CITIZEN") // CITIZEN, ANALYST, ADMIN
+  
+  govIdType   String?
+  govIdNumber String?
+  isVerified  Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  citizenProfile CitizenProfile?
+  requests       DevelopmentRequest[]
+  auditLogs      AuditLog[]
+}
+
+model CitizenProfile {
+  id                 String  @id @default(uuid())
+  userId             String  @unique
+  user               User    @relation(fields: [userId], references: [id])
+  languagePreference String  @default("en")
+  state              String?
+  district           String?
+}
+
+model Category {
+  id       String               @id @default(uuid())
+  name     String               @unique // "Drinking Water", etc.
+  requests DevelopmentRequest[]
+}
+
+model DevelopmentRequest {
+  id        String   @id @default(uuid())
+  reference String   @unique
+  citizenId String
+  citizen   User     @relation(fields: [citizenId], references: [id])
+  status    String   @default("SUBMITTED") // SUBMITTED, UNDER_ANALYSIS, REVIEWED, CLOSED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  language String // en, hi, bn, mr, te, ta
+
+  // Original text or transcript
+  originalText String?
+  voiceFileUrl String?
+  mediaUrl     String?
+
+  // Location info
+  state       String
+  district    String
+  subdistrict String?
+  latitude    Float?
+  longitude   Float?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+  severity   Int       @default(1) // 1-5
+
+  // AI Classification
+  aiSummary              String?
+  aiCategory             String?
+  aiSeverity             Int?
+  aiRequiresHumanReview  Boolean @default(true)
+
+  // Analyst Overrides
+  analystCategory String?
+  analystSeverity Int?
+
+  // Deduplication
+  duplicateGroupId String?
+
+  auditLogs AuditLog[]
+}
+
+model InfrastructureIndicator {
+  id               String  @id @default(uuid())
+  geographyType    String // "district", "state"
+  geographyCode    String // district or state name
+  indicatorName    String
+  value            Float
+  unit             String
+  year             Int
+  higherIsBetter   Boolean
+  weight           Float
+  sourceReference  String?
+
+  datasetVersionId String?
+  datasetVersion   DatasetVersion? @relation(fields: [datasetVersionId], references: [id])
+}
+
+model GovernmentProject {
+  id              String  @id @default(uuid())
+  projectName     String
+  category        String
+  stateCode       String
+  districtCode    String
+  status          String // planned, active, completed, cancelled, unknown
+  budgetAmount    Float?
+  startDate       DateTime?
+  endDate         DateTime?
+  sourceReference String?
+
+  datasetVersionId String?
+  datasetVersion   DatasetVersion? @relation(fields: [datasetVersionId], references: [id])
+}
+
+model PopulationDataset {
+  id                String  @id @default(uuid())
+  geographyType     String // "district", "state"
+  geographyCode     String
+  population        Int
+  populationDensity Float?
+  year              Int
+  sourceReference   String?
+
+  datasetVersionId String?
+  datasetVersion   DatasetVersion? @relation(fields: [datasetVersionId], references: [id])
+}
+
+model DatasetVersion {
+  id                String   @id @default(uuid())
+  source            String
+  sourceReference   String?
+  version           String
+  checksum          String?
+  rowCount          Int
+  importedTimestamp DateTime @default(now())
+  importedBy        String
+  status            String // SUCCESS, FAILED
+
+  projects          GovernmentProject[]
+  indicators        InfrastructureIndicator[]
+  populations       PopulationDataset[]
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String
+  entityId  String
+  entityType String
+  before    String?
+  after     String?
+  timestamp DateTime @default(now())
+  
+  requestId String?
+  request   DevelopmentRequest? @relation(fields: [requestId], references: [id])
+}
+
+model Recommendation {
+  id                   String   @id @default(uuid())
+  suggestedProjectType String
+  rationale            String
+  evidence             String
+  limitations          String
+  priorityScore        Float
+  status               String   @default("PENDING_REVIEW") // PENDING_REVIEW, APPROVED, REJECTED
+  
+  district             String
+  category             String
+  createdAt            DateTime @default(now())
+}
+
+model AnalyticalAlert {
+  id          String   @id @default(uuid())
+  type        String   // RISING_DEMAND, HIGH_GAP_NO_PROJECT, PERSISTENT_DEMAND
+  title       String
+  description String
+  district    String
+  category    String?
+  createdAt   DateTime @default(now())
+  isDismissed Boolean  @default(false)
+}
+
+model Scenario {
+  id                  String   @id @default(uuid())
+  name                String
+  description         String?
+  demandWeight        Float
+  infrastructureWeight Float
+  severityWeight      Float
+  createdAt           DateTime @default(now())
+}
